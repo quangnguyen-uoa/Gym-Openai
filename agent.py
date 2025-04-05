@@ -3,6 +3,7 @@ File holds self contained TRPO agent.
 """
 import torch
 import gym
+import numpy as np
 from numpy.random import choice
 from copy import deepcopy
 from torch.nn.utils.convert_parameters import parameters_to_vector
@@ -62,7 +63,17 @@ class TRPOAgent:
         self.buffers['actions'].append(action)
         self.buffers['log_probs'].append(normal_dist.log_prob(action))
         self.buffers['states'].append(state)
-        return action.cpu().numpy()
+        
+        # Convert to list instead of numpy array
+        action_list = action.cpu().tolist()
+        
+        # If the action is a single value, return it directly
+        if len(action_list) == 1:
+            # Convert to integer for discrete action space
+            return int(action_list[0])
+        
+        # Otherwise return the list
+        return action_list
 
     def kl(self, new_policy, new_std, states, grad_new=True):
         """Compute KL divergence between current policy and new one.
@@ -215,7 +226,9 @@ class TRPOAgent:
 
         # Choose states for conjugate gradient with np.random.choice
         number_of_states = int(self.cg_state_percent * num_batch_steps)
-        cg_states = states[choice(len(states), number_of_states, replace=False)]
+        # Use PyTorch's random permutation instead of NumPy's choice
+        indices = torch.randperm(len(states), device=self.device)[:number_of_states]
+        cg_states = states[indices]
 
         # Compute search direction as A^(-1)g, A is FIM
         gradients = self.conjugate_gradient(gradients, cg_states)
